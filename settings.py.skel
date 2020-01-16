@@ -1,0 +1,44 @@
+from bs4 import BeautifulSoup
+import time, emoji
+
+def textify(text):
+	soup = BeautifulSoup(text,"html.parser")
+	p = soup("p")
+	out = []
+	for ptag in p:
+		out.append(ptag.text.strip())
+	return " - ".join(out)
+
+class Feed:
+	def __init__(self,url):
+		self.url = url
+	def filter(self,items):
+		ret = []
+		for item in items:
+			filtered = self._filter_item(item)
+			if filtered not in (None, False): ret.append(filtered)
+		return ret
+	def _filter_item(self,item):
+		date = time.strftime("%Y-%m-%dT%H:%M:%S+00:00",item["published_parsed"])
+		summary = item["summary"]
+		if item.get("summary_detail",dict(type="text/plain"))["type"]=="text/html":
+			summary = textify(item["summary_detail"]["value"])
+		return [date,summary]
+
+class MastoFeed(Feed):
+	def __init__(self,server,user):
+		self.url="https://{}/users/{}.rss".format(server,user)
+	def _filter_item(self,item):
+		if not item["title"].startswith("New status by"):
+			return False
+		return [time.strftime("%Y-%m-%dT%H:%M:%S+00:00",item["published_parsed"]),emoji.demojize(textify(item["summary_detail"]["value"]))]
+
+class LinkAndTitle(Feed):
+	def _filter_item(self,item):
+		return [time.strftime("%Y-%m-%dT%H:%M:%S+00:00",item["published_parsed"]),"{} - {}".format(item["title"],item["link"])]
+
+feeds = dict()
+feeds["gargron.txt"]=MastoFeed("mastodon.social","Gargron")
+feeds["nyt_frontpage.txt"]=LinkAndTitle("https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml")
+
+output = "."
